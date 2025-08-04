@@ -1,0 +1,85 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/aws/serverless-application-model/main/samtranslator/schema/schema.json
+
+#This can be also done by just copying code multiple times but the Using  Autoscaling groups its easy
+#Using Python we can do this usin a for loop (using Boto)
+
+#This is a code to create multiple EC2 instances using Auto Scaling Groups
+#Parameters can be used to specify the instance type, AMI ID, subnet, security group, and the number of instances to create.
+#Steps:
+# 1) Go to AWS Management Console 
+# 2) Navigate to CloudFormation
+# 3) Click on "Create Stack" and choose "With new resources (standard)"
+# 4) Choose "Upload a template file" or "Specify an Amazon S3 template URL" or Sync to GitHub
+# 5) Upload your YAML file and click next 
+# 6) Enter the stack name and parameters
+# 7) Review the settings and click "Create stack"
+# 8) Wait for the stack creation to complete
+# 9) Once the stack is created, you can check the resources created in the CloudFormation console
+# 10) You can check the EC2 instances created in the EC2 console    
+
+
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Creating multiple EC2 instances using Auto Scaling Groups 
+
+Parameters:
+  InstanceType:
+    Type: String
+    Default: t2.micro
+    AllowedValues:
+      - t2.micro
+      - t2.small
+    Description: EC2 instance type
+
+  ImageId:
+    Type: AWS::EC2::Image::Id
+    Description: AMI ID to use for the instances
+
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: Subnet in which to launch the instances
+
+  SecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: Security group for the instances
+
+  MinSize:
+    Type: Number
+    Default: 1
+    Description: Minimum number of instances in the Auto Scaling group
+
+  MaxSize:
+    Type: Number
+    Default: 5
+    Description: Maximum number of instances in the Auto Scaling group
+
+  DesiredCapacity:
+    Type: Number
+    Default: 2
+    Description: Desired number of instances in the Auto Scaling group
+
+Resources:
+  CreateLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: LaunchTemplateInstance
+      LaunchTemplateData:
+        ImageId: !Ref ImageId
+        InstanceType: !Ref InstanceType
+        NetworkInterfaces:
+          - AssociatePublicIpAddress: true
+            DeviceIndex: 0
+            SubnetId: !Ref SubnetId
+            Groups:
+              - !Ref SecurityGroupId
+
+  CreateAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      MinSize: !Ref MinSize
+      MaxSize: !Ref MaxSize
+      DesiredCapacity: !Ref DesiredCapacity
+      VPCZoneIdentifier:
+        - !Ref SubnetId
+      LaunchTemplate:
+        LaunchTemplateId: !Ref CreateLaunchTemplate
+        Version: !GetAtt CreateLaunchTemplate.LatestVersionNumber
