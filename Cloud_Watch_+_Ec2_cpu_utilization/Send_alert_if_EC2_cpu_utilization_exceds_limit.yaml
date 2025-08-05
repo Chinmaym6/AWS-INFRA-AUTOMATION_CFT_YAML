@@ -1,0 +1,71 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/aws/serverless-application-model/main/samtranslator/schema/schema.json
+
+#This is a code to create a Cloud_watch if a particular Ec2 instance cpu utilization exceeds the given limit and triggering a Alarm and send Email to specified email_id
+
+  #Upload the code in Cloud formation :
+   #Steps:
+     # 1) Go to AWS Management Console
+     # 2) Navigate to CloudFormation
+     # 3) Click on "Create Stack" and choose "With new resources (standard)"
+     # 4) Choose "Upload a template file" or "Specify an Amazon S3 template URL" or Sync to GitHub
+     # 5) Upload your YAML file and click next
+     # 6) Enter the stack name and parameters
+     # 7) Review the settings and click "Create stack"
+     # 8) Wait for the stack creation to complete
+     # 9) Once the stack is created, you can check the resources created in the CloudFormation console
+     # 10) You will receive an email to confirm the subscription to the SNS topic
+     # 11) After confirming the subscription, you will receive email alerts when the CPU utilization exceeds the specified limit
+     # 12) You can also check the CloudWatch console for the created alarm and its
+
+
+  # Code Steps :-
+    #Create an SNS topic (Simple Notification Service)
+    #Create an SNS subscription (email)
+    #Create a CloudWatch Alarm (e.g., CPUUtilization ≥ 80%)
+    #Link the alarm to the SNS topic
+
+
+AWSTemplateFormatVersion: "2010-09-09"
+Description: |
+  [CloudFormation : https://github.com/Chinmaym6/AWS_Cloud_Formation_YAML/blob/main/Assets/Send_alert_if_EC2_cpu_utilization_exceds_limit.png ] 
+  Send alert if EC2 CPU utilization exceeds a specified limit
+
+Parameters: #This will take email and Ec2 instance id ans a parameter
+  InstanceId:
+    Type: String
+    Description: Enter the instance id
+  EmailAddress:
+    Type: String
+    Description: Enter the email address to receive notifications when CPU utilization exceeds the specified limit (e.g., example@example.com) 
+
+Resources:
+  CreateSNSTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: EC2_CPU_Utilization_Alert1
+      Subscription:
+        - Endpoint: "!Ref EmailAddress"
+          Protocol: email 
+
+  CreateCloudWatchAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: EC2_CPU_Utilization_Alert1
+      AlarmDescription: Alarm when the CPU utilization of the EC2 instance exceeds 80%
+      AlarmActions:
+        - "!GetAtt CreateSNSTopic.TopicArn" #This will get the topic which is created above
+      MetricName: CPUUtilization
+      Namespace: AWS/EC2
+      Dimensions:
+        - Name: InstanceId
+          Value: "!Ref InstanceId"
+      Period: 300        #5-minute intervals
+      EvaluationPeriods: 2  #5x2=10 if for continuously 10 minutes the cpu utilization is greater than the treshold then only it will trigger the alarm
+      Statistic: Average  #Use average CPU usage per period (We can set different values like 1)Maximun 2)Minimum etc..
+      Threshold: 80
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: breaching
+
+  
+
+      

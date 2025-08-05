@@ -1,0 +1,76 @@
+#This code is used to create a Ec2 instance from a snapshot in a different region using CloudFormation.
+
+#Steps in code:
+# 1) Initially you have a snapshot of a EBS volume in one region.
+# 2) You can create a new EC2 instance in a different region using that snapshot.
+# 3) Create a copy of the snapshot in the target region.
+# 4) Use that snapshot to create a new EBS volume.
+# 5) Create an EC2 instance from the new EBS volume.
+
+
+#Steps:
+# 1) Go to AWS Management Console 
+# 2) Navigate to CloudFormation
+# 3) Click on "Create Stack" and choose "With new resources (standard)"
+# 4) Choose "Upload a template file" or "Specify an Amazon S3 template URL" or Sync to GitHub
+# 5) Upload your YAML file and click next 
+# 6) Enter the stack name and parameters
+# 7) Review the settings and click "Create stack"
+# 8) Wait for the stack creation to complete
+# 9) Once the stack is created, you can check the resources created in the CloudFormation console
+# 10) You can check the EC2 instances created in the EC2 console
+
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Create EC2 instance from snapshot in a different region"
+Parameters:
+  SnapshotId:
+    Type: String
+    Description: "Enter the snapshot ID to create an EC2 instance from"
+  Region:
+    Type: String
+    Description: "Enter the target region where the EC2 instance will be created"
+    Default: "us-west-2"  # Example default region
+  InstanceType:
+    Type: String
+    Description: "Enter the instance type for the EC2 instance"
+    Default: "t2.micro"  # Example default instance type
+  KeyName:
+    Type: String
+    Description: "Enter the key pair name for SSH access to the EC2 instance"
+    Default: "my-key-pair"  # Example default key pair name
+  SubnetId:
+    Type: String
+    Description: "Enter the subnet ID where the EC2 instance will be launched"
+  securityGroupId:
+    Type: String
+    Description: "Enter the security group ID for the EC2 instance"
+  imageId:
+    Type: String
+    Description: "Enter the AMI ID for the EC2 instance"
+Resources:
+  CreateSnapshotCopy:
+    Type: AWS::EC2::Snapshot
+    Properties:
+      Description: "Copy of snapshot in target region"
+      SourceSnapshotId: !Ref SnapshotId
+      Region: !Ref Region
+
+  CreateEbsVolume:
+    Type: AWS::EC2::Volume
+    Properties:
+      AvailabilityZone: !Select [ 0, !GetAZs !Ref Region ]
+      Size: !GetAtt CreateSnapshotCopy.VolumeSize
+      SnapshotId: !Ref CreateSnapshotCopy
+      
+  CreateEc2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref imageId
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      SubnetId: !Ref SubnetId
+      SecurityGroupIds:
+        - !Ref securityGroupId
+      Volumes:
+        - Device: /dev/sda1
+          VolumeId: !Ref CreateEbsVolume
