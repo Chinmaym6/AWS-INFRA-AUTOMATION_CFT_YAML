@@ -34,3 +34,6 @@ When the CPU usage exceeds a defined threshold, an **SNS notification** is sent 
 ## 📌 Notes
 - Ensure your EC2 instance is running and **CloudWatch metrics** are enabled.
 - The email subscription must be **confirmed** before receiving alerts.
+
+
+![Email_Confirmation](./Email_Confirmation.png)
