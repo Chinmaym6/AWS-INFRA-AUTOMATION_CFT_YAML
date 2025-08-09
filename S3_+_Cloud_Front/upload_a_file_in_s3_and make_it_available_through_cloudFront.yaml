@@ -1,0 +1,156 @@
+#This template creates an S3 bucket and sets up a CloudFront distribution to serve files from the bucket.
+
+#Code steps:
+# 1) Create an S3 bucket with security configurations (encryption, versioning, public access blocked)
+# 2) Create Origin Access Control (OAC) for secure CloudFront-S3 integration
+# 3) Create a CloudFront distribution with S3 as origin
+# 4) Configure CloudFront distribution settings (caching, HTTPS redirect, compression)
+# 5) Create an S3 bucket policy to allow CloudFront access via OAC
+# 6) Output important URLs and resource identifiers for easy access
+
+# 1. Deploy CloudFormation stack → Wait for "CREATE_COMPLETE"
+# 2. Upload files to S3 bucket
+# 3. Access via CloudFront URL (Distribution domain name)
+
+#Deployment Steps:
+# 1) Go to AWS Management Console 
+# 2) Navigate to CloudFormation
+# 3) Click on "Create Stack" and choose "With new resources (standard)"
+# 4) Choose "Upload a template file" or "Specify an Amazon S3 template URL" or Sync to GitHub
+# 5) Upload your YAML file and click next 
+# 6) Enter the stack name and parameters
+# 7) Review the settings and click "Create stack"
+# 8) Wait for the stack creation to complete
+# 9) Once the stack is created, you can check the resources created in the CloudFormation console
+# 10) You can check the S3 bucket and CloudFront distribution created in the respective consoles
+# 11) Manually upload your files to the S3 bucket via AWS Console or CLI
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CloudFormation template to create S3 bucket and CloudFront distribution for file hosting'
+
+Parameters:
+  BucketName:
+    Type: String
+    Description: Name for the S3 bucket (must be globally unique)
+    Default: my-cloudfront-s3-bucket
+    AllowedPattern: ^[a-z0-9][a-z0-9-]*[a-z0-9]$
+    ConstraintDescription: Bucket name must be lowercase, contain only letters, numbers, and hyphens
+
+  DefaultRootObject:
+    Type: String
+    Description: Default file to serve when accessing the CloudFront distribution root
+    Default: index.html
+
+Resources:
+  # S3 Bucket for storing files
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${BucketName}-${AWS::AccountId}-${AWS::Region}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+  # Origin Access Control for CloudFront
+  OriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub '${AWS::StackName}-OAC'
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  # CloudFront Distribution (FIXED)
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Origins:
+          - Id: S3Origin
+            DomainName: !GetAtt S3Bucket.RegionalDomainName
+            S3OriginConfig:
+              OriginAccessIdentity: ''
+            OriginAccessControlId: !GetAtt OriginAccessControl.Id
+        Enabled: true
+        DefaultRootObject: !Ref DefaultRootObject
+        DefaultCacheBehavior:
+          TargetOriginId: S3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods:
+            - GET
+            - HEAD
+            - OPTIONS  
+          CachedMethods:
+            - GET
+            - HEAD
+          Compress: true
+          ForwardedValues:
+            QueryString: false
+            Cookies:
+              Forward: none
+        PriceClass: PriceClass_100
+        ViewerCertificate:
+          CloudFrontDefaultCertificate: true
+
+  # S3 Bucket Policy to allow CloudFront access
+  S3BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    DependsOn: CloudFrontDistribution
+    Properties:
+      Bucket: !Ref S3Bucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowCloudFrontServicePrincipal
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub 'arn:aws:s3:::${S3Bucket}/*'
+            Condition:
+              StringEquals:
+                'AWS:SourceArn': !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${CloudFrontDistribution}'
+
+Outputs:
+  S3BucketName:
+    Description: Name of the created S3 bucket
+    Value: !Ref S3Bucket
+    Export:
+      Name: !Sub '${AWS::StackName}-S3Bucket'
+
+  S3BucketURL:
+    Description: URL of the S3 bucket
+    Value: !Sub 'https://${S3Bucket}.s3.${AWS::Region}.amazonaws.com'
+
+  CloudFrontDistributionId:
+    Description: CloudFront Distribution ID
+    Value: !Ref CloudFrontDistribution
+    Export:
+      Name: !Sub '${AWS::StackName}-CloudFrontDistribution'
+
+  CloudFrontURL:
+    Description: CloudFront Distribution URL
+    Value: !Sub 'https://${CloudFrontDistribution.DomainName}'
+
+  CloudFrontDomainName:
+    Description: CloudFront Distribution Domain Name
+    Value: !GetAtt CloudFrontDistribution.DomainName
+    Export:
+      Name: !Sub '${AWS::StackName}-CloudFrontDomain'
+
+  FileUploadInstructions:
+    Description: Instructions for uploading files
+    Value: !Sub 'Upload your files to S3 bucket: ${S3Bucket}, then access via CloudFront URL'
+
+  SampleUploadCommand:
+    Description: Sample AWS CLI command to upload a file
+    Value: !Sub 'aws s3 cp your-file.html s3://${S3Bucket}/'
