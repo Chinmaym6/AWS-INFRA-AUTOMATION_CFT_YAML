@@ -349,34 +349,6 @@ aws lambda invoke --function-name SnapshotCleanupFunction response.json
 
 *Visual evidence of these improvements can be seen in the CloudFormation outputs and monitoring dashboards*
 
-## 🤝 Contributing
-
-We welcome contributions! Please see our contributing guidelines:
-
-1. **Fork** the repository
-2. **Create** a feature branch (`git checkout -b feature/amazing-feature`)
-3. **Commit** your changes (`git commit -m 'Add amazing feature'`)
-4. **Push** to the branch (`git push origin feature/amazing-feature`)
-5. **Open** a Pull Request
-
-## 📝 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🆘 Support
-
-For questions and support:
-
-- **GitHub Issues**: [Report bugs or request features](https://github.com/yourusername/aws-multi-service-projects/issues)
-- **Documentation**: [AWS CloudFormation User Guide](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/)
-- **AWS Support**: [AWS Support Center](https://console.aws.amazon.com/support/)
-
-## 📚 Additional Resources
-
-- [AWS Well-Architected Framework](https://aws.amazon.com/architecture/well-architected/)
-- [CloudFormation Best Practices](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/best-practices.html)
-- [AWS Cost Optimization Guide](https://aws.amazon.com/aws-cost-management/)
-- [Python Boto3 Documentation](https://boto3.amazonaws.com/v1/documentation/api/latest/index.html)
 
 ---
 
