@@ -1,0 +1,170 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Automates EBS Snapshot Cleanup using Lambda + EventBridge.
+  Deletes snapshots older than N days while preserving critical ones.
+
+Parameters:
+  RetentionDays:
+    Type: Number
+    Default: 30
+    Description: Number of days to retain snapshots
+
+  ScheduleExpression:   
+    Type: String
+    Default: "cron(0 0 1 * ? *)"
+    Description: "EventBridge schedule expression..."
+
+
+
+
+Resources:
+  ### IAM Role for Lambda ###
+  SnapshotCleanupRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: SnapshotCleanupPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:DescribeSnapshots
+                  - ec2:DescribeVolumes
+                  - ec2:DescribeInstances
+                  - ec2:DeleteSnapshot
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: "*"
+
+  ### Lambda Function with Inline Code ###
+  SnapshotCleanupFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: SnapshotCleanupFunction
+      Handler: index.lambda_handler
+      Role: !GetAtt SnapshotCleanupRole.Arn
+      Runtime: python3.9
+      Timeout: 300
+      MemorySize: 128
+      Environment:
+        Variables:
+          RETENTION_DAYS: !Ref RetentionDays
+      Code:
+        ZipFile: |
+          import boto3
+          from datetime import datetime, timezone
+          import logging
+          import os
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+          RETENTION_DAYS = int(os.environ.get("RETENTION_DAYS", 30))
+
+          def lambda_handler(event, context):
+              ec2 = boto3.client('ec2')
+              logger.info(f"Starting snapshot cleanup: Retention = {RETENTION_DAYS} days")
+
+              try:
+                  paginator = ec2.get_paginator('describe_snapshots')
+                  pages = paginator.paginate(OwnerIds=['self'])
+
+                  total_snapshots = 0
+                  deleted_count = 0
+
+                  for page in pages:
+                      for snapshot in page['Snapshots']:
+                          total_snapshots += 1
+                          snapshot_id = snapshot['SnapshotId']
+                          start_time = snapshot['StartTime']
+                          age_days = (datetime.now(timezone.utc) - start_time).days
+                          logger.info(f"Snapshot {snapshot_id} is {age_days} days old")
+
+                          if age_days <= RETENTION_DAYS:
+                              logger.info(f"Keeping snapshot: {snapshot_id} (age {age_days} days)")
+                              continue
+
+                          volume_id = snapshot.get('VolumeId')
+                          if not volume_id:
+                              ec2.delete_snapshot(SnapshotId=snapshot_id)
+                              logger.info(f"Deleted snapshot (no volume): {snapshot_id}")
+                              deleted_count += 1
+                              continue
+
+                          try:
+                              volume = ec2.describe_volumes(VolumeIds=[volume_id])['Volumes'][0]
+                              attachments = volume.get('Attachments', [])
+
+                              attached_to_running_instance = False
+                              for attachment in attachments:
+                                  instance_id = attachment.get('InstanceId')
+                                  if instance_id:
+                                      instance = ec2.describe_instances(InstanceIds=[instance_id])['Reservations'][0]['Instances'][0]
+                                      state = instance.get('State', {}).get('Name')
+                                      if state == 'running':
+                                          attached_to_running_instance = True
+                                          break
+
+                              if attached_to_running_instance:
+                                  logger.info(f"Keeping snapshot {snapshot_id} (attached to running instance)")
+                                  continue
+                              else:
+                                  ec2.delete_snapshot(SnapshotId=snapshot_id)
+                                  logger.info(f"Deleted snapshot {snapshot_id} (volume not in use)")
+                                  deleted_count += 1
+
+                          except Exception as e:
+                              logger.warning(f"Could not describe volume {volume_id} for snapshot {snapshot_id}: {str(e)}")
+                              ec2.delete_snapshot(SnapshotId=snapshot_id)
+                              logger.info(f"Deleted snapshot {snapshot_id} (volume not found)")
+                              deleted_count += 1
+
+                  logger.info(f"Processed {total_snapshots} snapshots. Deleted: {deleted_count}")
+                  return {
+                      'statusCode': 200,
+                      'body': f"Snapshot cleanup completed. Processed: {total_snapshots}, Deleted: {deleted_count}"
+                  }
+
+              except Exception as e:
+                  logger.error(f"Snapshot cleanup failed: {str(e)}")
+                  raise e
+
+  ### EventBridge Rule ###
+  SnapshotCleanupSchedule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: SnapshotCleanupSchedule
+      ScheduleExpression: !Ref ScheduleExpression
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt SnapshotCleanupFunction.Arn
+          Id: SnapshotCleanupTarget
+
+  ### Permission for EventBridge to Invoke Lambda ###
+  LambdaInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref SnapshotCleanupFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt SnapshotCleanupSchedule.Arn
+
+Outputs:
+  LambdaFunctionName:
+    Description: Name of the snapshot cleanup Lambda function
+    Value: !Ref SnapshotCleanupFunction
+  EventBridgeRuleName:
+    Description: Name of the EventBridge rule
+    Value: !Ref SnapshotCleanupSchedule
