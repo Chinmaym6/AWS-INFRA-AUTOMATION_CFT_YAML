@@ -1,4 +1,4 @@
-# AWS-Multi-Service-Projects
+# AWS-INFRA-AUTOMATION_CFT_YAML
 This repository contains real-world AWS infrastructure projects that demonstrate the use of multiple AWS services working together, provisioned using AWS CloudFormation.
 
 ## Features
